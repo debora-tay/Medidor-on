@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Medidor · Leituras & Previsão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg: #12181c;
+    --surface: #1b2329;
+    --surface-alt: #232c33;
+    --hairline: #2c363d;
+    --text: #e7ecef;
+    --text-muted: #7c8a94;
+    --amber: #f2b705;
+    --amber-dim: #8a6c0f;
+    --cyan: #3fd9c7;
+    --danger: #e85d4c;
+    --radius: 14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(242,183,5,0.06), transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .shell{
+    max-width:480px;
+    margin:0 auto;
+    padding:20px 16px 60px;
+    min-height:100vh;
+  }
+  /* ---------- top bar ---------- */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:4px 2px 20px;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .brand-mark{
+    width:34px;height:34px;border-radius:9px;
+    background:linear-gradient(160deg, var(--amber), #b98904);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow: 0 0 0 1px rgba(242,183,5,0.25), 0 4px 14px rgba(242,183,5,0.18);
+  }
+  .brand-mark svg{width:18px;height:18px;}
+  .brand-name{font-weight:700;font-size:15px;letter-spacing:0.2px;}
+  .brand-sub{font-size:11px;color:var(--text-muted);margin-top:1px;}
+  .btn-ghost{
+    background:transparent;border:1px solid var(--hairline);
+    color:var(--text-muted); font-family:'Inter',sans-serif;
+    font-size:12px; padding:7px 12px; border-radius:20px; cursor:pointer;
+    transition:border-color .15s, color .15s;
+  }
+  .btn-ghost:hover{border-color:var(--text-muted); color:var(--text);}
+
+  /* ---------- login ---------- */
+  .login-wrap{
+    min-height:80vh; display:flex; flex-direction:column; justify-content:center;
+  }
+  .login-card{
+    background:var(--surface);
+    border:1px solid var(--hairline);
+    border-radius:var(--radius);
+    padding:28px 24px 26px;
+  }
+  .login-mark{
+    width:52px;height:52px;border-radius:14px;margin:0 auto 18px;
+    background:linear-gradient(160deg, var(--amber), #b98904);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow: 0 0 0 1px rgba(242,183,5,0.25), 0 6px 20px rgba(242,183,5,0.22);
+  }
+  .login-mark svg{width:26px;height:26px;}
+  .login-title{text-align:center;font-size:19px;font-weight:700;margin-bottom:4px;}
+  .login-sub{text-align:center;font-size:13px;color:var(--text-muted);margin-bottom:24px;}
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;
+    color:var(--text-muted); margin-bottom:6px; font-weight:600;
+  }
+  input, select, textarea{
+    width:100%;
+    background:var(--surface-alt);
+    border:1px solid var(--hairline);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    font-size:15px;
+    padding:11px 12px;
+    border-radius:9px;
+    outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus, textarea:focus{
+    border-color:var(--amber);
+    box-shadow:0 0 0 3px rgba(242,183,5,0.14);
+  }
+  .btn-primary{
+    width:100%;
+    background:var(--amber);
+    color:#1a1400;
+    border:none;
+    font-family:'Inter',sans-serif;
+    font-weight:700;
+    font-size:14px;
+    padding:12px 14px;
+    border-radius:9px;
+    cursor:pointer;
+    margin-top:4px;
+    transition:filter .15s, transform .1s;
+  }
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-primary:active{transform:scale(0.98);}
+  .btn-primary:disabled{opacity:0.55; cursor:default;}
+  .error-msg{
+    font-size:12.5px; color:var(--danger); margin-top:10px; text-align:center;
+    min-height:16px;
+  }
+  .error-msg.info{color:var(--cyan);}
+  .auth-switch{
+    text-align:center; font-size:12.5px; color:var(--text-muted); margin-top:14px;
+  }
+  .auth-switch a{color:var(--amber); text-decoration:none; font-weight:600;}
+  .auth-switch a:hover{text-decoration:underline;}
+
+  /* ---------- dashboard ---------- */
+  .hidden{display:none !important;}
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--hairline);
+    border-radius:var(--radius);
+    padding:20px;
+    margin-bottom:16px;
+  }
+  .panel-label{
+    font-size:11px; text-transform:uppercase; letter-spacing:0.8px;
+    color:var(--text-muted); font-weight:600; margin-bottom:10px;
+  }
+
+  /* meter readout — signature element */
+  .meter{
+    position:relative;
+    background:
+      repeating-linear-gradient(180deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 3px),
+      var(--surface-alt);
+    border:1px solid var(--hairline);
+    border-radius:11px;
+    padding:18px 18px 16px;
+    overflow:hidden;
+  }
+  .meter::after{
+    content:"";
+    position:absolute; inset:0;
+    background:radial-gradient(ellipse 200px 80px at 20% 0%, rgba(242,183,5,0.10), transparent 70%);
+    pointer-events:none;
+  }
+  .meter-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;}
+  .meter-date{font-size:11.5px; color:var(--text-muted);}
+  .meter-tag{
+    font-size:10px; color:var(--amber); background:rgba(242,183,5,0.12);
+    padding:2px 8px; border-radius:20px; font-weight:600; letter-spacing:0.4px;
+  }
+  .meter-digits{
+    font-family:'JetBrains Mono', monospace;
+    font-weight:700;
+    font-size:44px;
+    letter-spacing:1px;
+    color:var(--amber);
+    text-shadow:0 0 18px rgba(242,183,5,0.35);
+    line-height:1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .meter-unit{font-size:16px; color:var(--amber-dim); margin-left:6px; font-weight:600;}
+  .meter-delta{font-size:12.5px; margin-top:8px; color:var(--text-muted);}
+  .meter-delta b{color:var(--cyan); font-weight:600;}
+
+  /* stat row */
+  .stat-row{display:flex; gap:10px; margin-top:14px;}
+  .stat{
+    flex:1; background:var(--surface-alt); border:1px solid var(--hairline);
+    border-radius:9px; padding:12px 12px 11px;
+  }
+  .stat-label{font-size:10.5px; color:var(--text-muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:0.4px;}
+  .stat-value{font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:700; color:var(--cyan);}
+  .stat-value small{font-size:12px; color:var(--text-muted); font-weight:500; font-family:'Inter',sans-serif;}
+  .ciclo-info{
+    margin-top:12px; font-size:12px; color:var(--text-muted);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px;
+  }
+  .ciclo-info b{color:var(--text); font-weight:600;}
+
+  /* form */
+  .form-row{display:flex; gap:10px;}
+  .form-row .field{flex:1;}
+  .ciclo-check{
+    display:flex; align-items:center; gap:9px;
+    background:var(--surface-alt); border:1px solid var(--hairline);
+    border-radius:9px; padding:11px 12px; margin-bottom:14px;
+    font-size:12.5px; color:var(--text-muted); cursor:pointer;
+  }
+  .ciclo-check input{width:auto; accent-color:var(--amber); cursor:pointer;}
+  .ciclo-check span{line-height:1.3;}
+
+  /* history */
+  .history-item{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:11px 0; border-bottom:1px solid var(--hairline);
+  }
+  .history-item:last-child{border-bottom:none;}
+  .hist-left{display:flex; flex-direction:column;}
+  .hist-date{font-size:13.5px; font-weight:600;}
+  .hist-origem{font-size:11px; color:var(--text-muted); margin-top:2px;}
+  .hist-right{display:flex; align-items:center; gap:10px;}
+  .hist-kwh{font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600;}
+  .hist-consumo{font-size:11px; color:var(--cyan); font-family:'JetBrains Mono',monospace;}
+  .del-btn{
+    background:transparent; border:none; color:var(--text-muted); cursor:pointer;
+    width:26px;height:26px; border-radius:7px; display:flex;align-items:center;justify-content:center;
+    transition:background .15s, color .15s;
+  }
+  .del-btn:hover{background:rgba(232,93,76,0.14); color:var(--danger);}
+  .empty-state{text-align:center; color:var(--text-muted); font-size:13px; padding:22px 0;}
+
+  .chart-wrap{position:relative; height:200px; margin-top:6px;}
+
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background:var(--surface-alt); border:1px solid var(--hairline);
+    color:var(--text); font-size:13px; padding:10px 16px; border-radius:20px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.4);
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+    z-index:50; max-width:90%; text-align:center;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(-4px);}
+
+  ::placeholder{color:#54626b;}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ===== LOGIN VIEW ===== -->
+  <div id="loginView" class="login-wrap">
+    <div class="login-card">
+      <div class="login-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" stroke="#1a1400" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      </div>
+      <div class="login-title" id="authTitle">Medidor</div>
+      <div class="login-sub" id="authSub">Entre para registrar suas leituras</div>
+
+      <div class="field">
+        <label>E-mail</label>
+        <input type="email" id="loginEmail" placeholder="voce@email.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="field hidden" id="confirmPasswordField">
+        <label>Confirmar senha</label>
+        <input type="password" id="confirmPassword" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <button class="btn-primary" id="loginBtn">Entrar</button>
+      <div class="error-msg" id="loginError"></div>
+      <div class="auth-switch" id="authSwitch">
+        Não tem conta? <a href="#" id="toSignupLink">Criar conta</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== DASHBOARD VIEW ===== -->
+  <div id="dashView" class="hidden">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" stroke="#1a1400" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <div class="brand-name">Medidor</div>
+          <div class="brand-sub" id="userEmailLabel">—</div>
+        </div>
+      </div>
+      <button class="btn-ghost" id="logoutBtn">Sair</button>
+    </div>
+
+    <!-- current reading -->
+    <div class="panel" style="padding:16px;">
+      <div class="meter">
+        <div class="meter-top">
+          <span class="meter-date" id="lastReadingDate">sem leituras ainda</span>
+          <span class="meter-tag">ATUAL</span>
+        </div>
+        <div><span class="meter-digits" id="lastReadingValue">— — — —</span><span class="meter-unit">kWh</span></div>
+        <div class="meter-delta" id="lastReadingDelta">Registre sua primeira leitura abaixo.</div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat">
+          <div class="stat-label">Consumo no ciclo</div>
+          <div class="stat-value" id="statConsumoCiclo">—<small> kWh</small></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Previsão do ciclo</div>
+          <div class="stat-value" id="statForecast">—<small> kWh</small></div>
+        </div>
+      </div>
+      <div class="ciclo-info" id="cicloInfo">—</div>
+    </div>
+
+    <!-- forecast chart -->
+    <div class="panel">
+      <div class="panel-label">Tendência &amp; previsão</div>
+      <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+    </div>
+
+    <!-- add reading -->
+    <div class="panel">
+      <div class="panel-label">Nova leitura</div>
+      <div class="form-row">
+        <div class="field">
+          <label>Data</label>
+          <input type="date" id="inputData">
+        </div>
+        <div class="field">
+          <label>Leitura (kWh)</label>
+          <input type="number" id="inputKwh" placeholder="ex: 4820" inputmode="numeric">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Origem</label>
+          <select id="inputOrigem">
+            <option value="manual">Manual</option>
+            <option value="foto">Foto do medidor</option>
+            <option value="app_concessionaria">App da concessionária</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Observação (opcional)</label>
+        <input type="text" id="inputObs" placeholder="ex: dia quente, ar-condicionado ligado">
+      </div>
+      <label class="ciclo-check">
+        <input type="checkbox" id="inputFechamento">
+        <span>Esta é a leitura de fechamento do ciclo (dia 22)</span>
+      </label>
+      <button class="btn-primary" id="addBtn">Salvar leitura</button>
+      <div class="error-msg" id="addError"></div>
+    </div>
+
+    <!-- history -->
+    <div class="panel">
+      <div class="panel-label">Histórico</div>
+      <div id="historyList"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// CONFIG — dados do seu projeto Supabase
+// ============================================================
+const SUPABASE_URL = "https://evnsmofelhdymcuastze.supabase.co";
+const SUPABASE_KEY = "sb_publishable_F3SzF4AORfSwABcTFOOL7Q_38O1b8Ha";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false } // sessão em memória: reabrir o app pede login de novo
+});
+
+let readings = []; // cache local ordenado por data ascendente
+let trendChartInstance = null;
+
+// ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
+
+function showToast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2400);
+}
+
+function fmtDateBR(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+function fmtInt(n){
+  return new Intl.NumberFormat('pt-BR').format(Math.round(n));
+}
+
+function todayISO(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+let authMode = 'login'; // 'login' | 'signup'
+
+$('loginBtn').addEventListener('click', ()=>{
+  if(authMode === 'login') doLogin(); else doSignup();
+});
+$('confirmPassword').addEventListener('keydown', (e)=>{ if(e.key==='Enter') $('loginBtn').click(); });
+$('loginPassword').addEventListener('keydown', (e)=>{ if(e.key==='Enter' && authMode==='login') doLogin(); });
+
+function setAuthMode(mode){
+  authMode = mode;
+  const errEl = $('loginError');
+  errEl.textContent = '';
+  errEl.className = 'error-msg';
+
+  if(mode === 'signup'){
+    $('authTitle').textContent = 'Criar conta';
+    $('authSub').textContent = 'Cadastre-se para começar a registrar leituras';
+    $('confirmPasswordField').classList.remove('hidden');
+    $('loginBtn').textContent = 'Criar conta';
+    $('authSwitch').innerHTML = 'Já tem conta? <a href="#" id="toLoginLink">Entrar</a>';
+    $('toLoginLink').addEventListener('click', (e)=>{ e.preventDefault(); setAuthMode('login'); });
+  } else {
+    $('authTitle').textContent = 'Medidor';
+    $('authSub').textContent = 'Entre para registrar suas leituras';
+    $('confirmPasswordField').classList.add('hidden');
+    $('loginBtn').textContent = 'Entrar';
+    $('authSwitch').innerHTML = 'Não tem conta? <a href="#" id="toSignupLink">Criar conta</a>';
+    $('toSignupLink').addEventListener('click', (e)=>{ e.preventDefault(); setAuthMode('signup'); });
+  }
+}
+$('toSignupLink').addEventListener('click', (e)=>{ e.preventDefault(); setAuthMode('signup'); });
+
+async function doLogin(){
+  const email = $('loginEmail').value.trim();
+  const password = $('loginPassword').value;
+  const errEl = $('loginError');
+  errEl.className = 'error-msg';
+  errEl.textContent = '';
+  if(!email || !password){
+    errEl.textContent = 'Preencha e-mail e senha.';
+    return;
+  }
+  $('loginBtn').disabled = true;
+  $('loginBtn').textContent = 'Entrando...';
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+
+  $('loginBtn').disabled = false;
+  $('loginBtn').textContent = 'Entrar';
+
+  if(error){
+    errEl.textContent = 'Não foi possível entrar: ' + (error.message === 'Invalid login credentials' ? 'e-mail ou senha incorretos.' : error.message);
+    return;
+  }
+  enterDashboard(data.user);
+}
+
+async function doSignup(){
+  const email = $('loginEmail').value.trim();
+  const password = $('loginPassword').value;
+  const confirmPassword = $('confirmPassword').value;
+  const errEl = $('loginError');
+  errEl.className = 'error-msg';
+  errEl.textContent = '';
+
+  if(!email || !password){
+    errEl.textContent = 'Preencha e-mail e senha.';
+    return;
+  }
+  if(password.length < 6){
+    errEl.textContent = 'A senha precisa ter pelo menos 6 caracteres.';
+    return;
+  }
+  if(password !== confirmPassword){
+    errEl.textContent = 'As senhas não coincidem.';
+    return;
+  }
+
+  $('loginBtn').disabled = true;
+  $('loginBtn').textContent = 'Criando conta...';
+
+  const { data, error } = await sb.auth.signUp({ email, password });
+
+  $('loginBtn').disabled = false;
+  $('loginBtn').textContent = 'Criar conta';
+
+  if(error){
+    const desativado = /signups? not allowed|signup is disabled|signup_disabled/i.test(error.message);
+    errEl.textContent = desativado
+      ? 'O cadastro está fechado no momento. Fale com o administrador para criar sua conta.'
+      : 'Não foi possível criar a conta: ' + error.message;
+    return;
+  }
+
+  if(data.session){
+    // confirmação de e-mail está desativada no projeto: entra direto
+    enterDashboard(data.user);
+  } else {
+    setAuthMode('login');
+    const errEl2 = $('loginError');
+    errEl2.className = 'error-msg info';
+    errEl2.textContent = 'Conta criada! Verifique seu e-mail para confirmar antes de entrar.';
+  }
+}
+
+$('logoutBtn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  $('dashView').classList.add('hidden');
+  $('loginView').classList.remove('hidden');
+  $('loginEmail').value = '';
+  $('loginPassword').value = '';
+  $('confirmPassword').value = '';
+  setAuthMode('login');
+});
+
+function enterDashboard(user){
+  $('loginView').classList.add('hidden');
+  $('dashView').classList.remove('hidden');
+  $('userEmailLabel').textContent = user.email;
+  $('inputData').value = todayISO();
+  loadReadings();
+}
+
+// ============================================================
+// DATA — carregar / inserir / excluir leituras e ciclos
+// ============================================================
+let ciclos = []; // ordenado por data_fechamento ascendente
+
+async function loadReadings(){
+  const [{ data: leiturasData, error: e1 }, { data: ciclosData, error: e2 }] = await Promise.all([
+    sb.from('leituras')
+      .select('id, data_leitura, leitura_kwh, origem, observacao, created_at')
+      .order('data_leitura', { ascending: true }),
+    sb.from('ciclos')
+      .select('id, data_fechamento, leitura_kwh, leitura_id')
+      .order('data_fechamento', { ascending: true })
+  ]);
+
+  if(e1){ showToast('Erro ao carregar leituras: ' + e1.message); return; }
+  if(e2){ showToast('Erro ao carregar ciclos: ' + e2.message); return; }
+
+  readings = leiturasData || [];
+  ciclos = ciclosData || [];
+  render();
+}
+
+$('addBtn').addEventListener('click', addReading);
+
+async function addReading(){
+  const data_leitura = $('inputData').value;
+  const leitura_kwh = parseInt($('inputKwh').value, 10);
+  const origem = $('inputOrigem').value;
+  const observacao = $('inputObs').value.trim() || null;
+  const isFechamento = $('inputFechamento').checked;
+  const errEl = $('addError');
+  errEl.textContent = '';
+
+  if(!data_leitura || isNaN(leitura_kwh)){
+    errEl.textContent = 'Informe data e leitura em kWh (número inteiro).';
+    return;
+  }
+
+  $('addBtn').disabled = true;
+  $('addBtn').textContent = 'Salvando...';
+
+  const { data: inserted, error } = await sb.from('leituras')
+    .insert({ data_leitura, leitura_kwh, origem, observacao })
+    .select('id')
+    .single();
+
+  if(error){
+    $('addBtn').disabled = false;
+    $('addBtn').textContent = 'Salvar leitura';
+    errEl.textContent = 'Erro ao salvar: ' + error.message;
+    return;
+  }
+
+  if(isFechamento){
+    const { error: cicloError } = await sb.from('ciclos').upsert({
+      data_fechamento: data_leitura,
+      leitura_kwh,
+      leitura_id: inserted.id
+    }, { onConflict: 'data_fechamento' });
+
+    if(cicloError){
+      showToast('Leitura salva, mas erro ao registrar ciclo: ' + cicloError.message);
+    }
+  }
+
+  $('addBtn').disabled = false;
+  $('addBtn').textContent = 'Salvar leitura';
+  $('inputKwh').value = '';
+  $('inputObs').value = '';
+  $('inputFechamento').checked = false;
+  $('inputData').value = todayISO();
+  showToast(isFechamento ? 'Leitura e fechamento de ciclo registrados.' : 'Leitura registrada.');
+  loadReadings();
+}
+
+async function deleteReading(id){
+  if(!confirm('Excluir esta leitura?')) return;
+  const { error } = await sb.from('leituras').delete().eq('id', id);
+  if(error){
+    showToast('Erro ao excluir: ' + error.message);
+    return;
+  }
+  showToast('Leitura excluída.');
+  loadReadings();
+}
+
+// ============================================================
+// PREVISÃO — baseada no ciclo de fechamento (sempre dia 22)
+// ============================================================
+// soma 1 mês a uma data mantendo o dia de fechamento (lida com meses de 28-31 dias)
+function addOneMonth(date){
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + 1);
+  // se o mês "estourou" (ex: 31/01 -> 03/03), volta pro último dia do mês certo
+  if(d.getDate() !== day){
+    d.setDate(0);
+  }
+  return d;
+}
+
+function computeForecast(list, ciclosList){
+  if(list.length < 2) return null;
+
+  // taxa de consumo recente (kWh/dia), baseada nos intervalos entre leituras
+  const deltas = [];
+  for(let i=1; i<list.length; i++){
+    const prev = list[i-1], curr = list[i];
+    const days = (new Date(curr.data_leitura) - new Date(prev.data_leitura)) / 86400000;
+    if(days > 0){
+      deltas.push({
+        date: curr.data_leitura,
+        consumo: curr.leitura_kwh - prev.leitura_kwh,
+        kwhPerDay: (curr.leitura_kwh - prev.leitura_kwh) / days,
+        days
+      });
+    }
+  }
+  if(deltas.length === 0) return null;
+
+  const recent = deltas.slice(-7);
+  const recentAvg = recent.reduce((s,d)=>s+d.kwhPerDay,0) / recent.length;
+  const historicalAvg = deltas.reduce((s,d)=>s+d.kwhPerDay,0) / deltas.length;
+
+  const last = list[list.length-1];
+  const lastDate = new Date(last.data_leitura + 'T00:00:00');
+
+  // último ciclo fechado (referência do início da contagem)
+  const ultimoCiclo = (ciclosList && ciclosList.length) ? ciclosList[ciclosList.length-1] : null;
+
+  let cicloInicio, cicloInicioReading, cicloFim;
+  if(ultimoCiclo){
+    cicloInicio = new Date(ultimoCiclo.data_fechamento + 'T00:00:00');
+    cicloInicioReading = ultimoCiclo.leitura_kwh;
+    cicloFim = addOneMonth(cicloInicio);
+  } else {
+    // sem ciclo cadastrado ainda: usa a primeira leitura disponível como referência
+    cicloInicio = new Date(list[0].data_leitura + 'T00:00:00');
+    cicloInicioReading = list[0].leitura_kwh;
+    cicloFim = addOneMonth(cicloInicio);
+  }
+
+  const consumoAteAgora = last.leitura_kwh - cicloInicioReading;
+  const diasNoCiclo = Math.round((cicloFim - cicloInicio) / 86400000);
+  const diasDecorridos = Math.round((lastDate - cicloInicio) / 86400000);
+  const diasRestantes = Math.max(diasNoCiclo - diasDecorridos, 0);
+  const previsaoTotal = consumoAteAgora + recentAvg * diasRestantes;
+
+  return {
+    recentAvg, historicalAvg, consumoAteAgora, previsaoTotal,
+    cicloInicio, cicloFim, diasNoCiclo, diasDecorridos, diasRestantes,
+    deltas
+  };
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function render(){
+  renderMeter();
+  renderStats();
+  renderChart();
+  renderHistory();
+}
+
+function renderMeter(){
+  if(readings.length === 0){
+    $('lastReadingDate').textContent = 'sem leituras ainda';
+    $('lastReadingValue').textContent = '— — — —';
+    $('lastReadingDelta').textContent = 'Registre sua primeira leitura abaixo.';
+    return;
+  }
+  const last = readings[readings.length-1];
+  $('lastReadingDate').textContent = fmtDateBR(last.data_leitura);
+  $('lastReadingValue').textContent = fmtInt(last.leitura_kwh);
+
+  if(readings.length >= 2){
+    const prev = readings[readings.length-2];
+    const consumo = last.leitura_kwh - prev.leitura_kwh;
+    const days = Math.max((new Date(last.data_leitura) - new Date(prev.data_leitura))/86400000, 1);
+    $('lastReadingDelta').innerHTML = `Desde ${fmtDateBR(prev.data_leitura)}: <b>+${fmtInt(consumo)} kWh</b> em ${Math.round(days)} dia(s)`;
+  } else {
+    $('lastReadingDelta').textContent = 'Adicione mais uma leitura para começarmos a calcular consumo.';
+  }
+}
+
+function renderStats(){
+  const f = computeForecast(readings, ciclos);
+  if(!f){
+    $('statConsumoCiclo').innerHTML = '—<small> kWh</small>';
+    $('statForecast').innerHTML = '—<small> kWh</small>';
+    $('cicloInfo').textContent = ciclos.length === 0
+      ? 'Nenhum ciclo de fechamento cadastrado ainda — marque uma leitura como fechamento para começar.'
+      : '—';
+    return;
+  }
+  $('statConsumoCiclo').innerHTML = fmtInt(f.consumoAteAgora) + '<small> kWh</small>';
+  $('statForecast').innerHTML = fmtInt(f.previsaoTotal) + '<small> kWh</small>';
+  $('cicloInfo').innerHTML =
+    `Ciclo <b>${fmtDateBR(f.cicloInicio.toISOString().slice(0,10))} → ${fmtDateBR(f.cicloFim.toISOString().slice(0,10))}</b> · ` +
+    `dia ${f.diasDecorridos} de ${f.diasNoCiclo} · média <b>${fmtInt(f.recentAvg)} kWh/dia</b>`;
+}
+
+function renderChart(){
+  const ctx = $('trendChart').getContext('2d');
+  const f = computeForecast(readings, ciclos);
+
+  const labels = readings.map(r => fmtDateBR(r.data_leitura));
+  const actualData = readings.map(r => r.leitura_kwh);
+  let forecastLabels = [...labels];
+  let forecastData = readings.map(()=>null);
+
+  if(f && readings.length >= 2){
+    const last = readings[readings.length-1];
+    forecastLabels.push(fmtDateBR(f.cicloFim.toISOString().slice(0,10)) + ' (fech.)');
+    forecastData[forecastData.length-1] = last.leitura_kwh;
+    forecastData.push(last.leitura_kwh + f.recentAvg * f.diasRestantes);
+    actualData.push(null);
+  }
+
+  if(trendChartInstance) trendChartInstance.destroy();
+
+  trendChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: forecastLabels,
+      datasets: [
+        {
+          label: 'Leitura registrada',
+          data: actualData,
+          borderColor: '#f2b705',
+          backgroundColor: 'rgba(242,183,5,0.08)',
+          pointBackgroundColor: '#f2b705',
+          pointRadius: 3,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.25,
+          spanGaps: true
+        },
+        {
+          label: 'Previsão',
+          data: forecastData,
+          borderColor: '#3fd9c7',
+          borderDash: [5,4],
+          pointRadius: 3,
+          pointBackgroundColor: '#3fd9c7',
+          borderWidth: 2,
+          fill: false,
+          spanGaps: true
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: '#7c8a94', font: { family:'Inter', size: 11 }, boxWidth: 10 }
+        },
+        tooltip: {
+          backgroundColor: '#1b2329',
+          borderColor: '#2c363d',
+          borderWidth: 1,
+          titleColor: '#e7ecef',
+          bodyColor: '#e7ecef',
+          titleFont: { family:'Inter' },
+          bodyFont: { family:'JetBrains Mono' }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color:'#7c8a94', font:{ family:'Inter', size:10 }, maxRotation:0, autoSkip:true, maxTicksLimit:6 },
+          grid: { color:'#232c33' }
+        },
+        y: {
+          ticks: { color:'#7c8a94', font:{ family:'JetBrains Mono', size:10 } },
+          grid: { color:'#232c33' }
+        }
+      }
+    }
+  });
+}
+
+function renderHistory(){
+  const wrap = $('historyList');
+  if(readings.length === 0){
+    wrap.innerHTML = '<div class="empty-state">Nenhuma leitura registrada ainda.</div>';
+    return;
+  }
+  const ordered = [...readings].reverse(); // mais recente primeiro
+  wrap.innerHTML = ordered.map((r, idx) => {
+    const originalIdx = readings.length - 1 - idx;
+    let consumoHTML = '';
+    if(originalIdx > 0){
+      const prev = readings[originalIdx-1];
+      const consumo = r.leitura_kwh - prev.leitura_kwh;
+      consumoHTML = `<div class="hist-consumo">+${fmtInt(consumo)} kWh</div>`;
+    }
+    const origemLabel = {
+      manual: 'Manual', foto: 'Foto do medidor',
+      app_concessionaria: 'App da concessionária', outro: 'Outro'
+    }[r.origem] || (r.origem || '—');
+
+    return `
+      <div class="history-item">
+        <div class="hist-left">
+          <div class="hist-date">${fmtDateBR(r.data_leitura)}</div>
+          <div class="hist-origem">${origemLabel}${r.observacao ? ' · ' + r.observacao : ''}</div>
+        </div>
+        <div class="hist-right">
+          <div>
+            <div class="hist-kwh">${fmtInt(r.leitura_kwh)} kWh</div>
+            ${consumoHTML}
+          </div>
+          <button class="del-btn" data-id="${r.id}" title="Excluir">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z"/></svg>
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+
+  wrap.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> deleteReading(btn.dataset.id));
+  });
+}
+
+// ============================================================
+// INIT — verifica se já existe sessão ativa (mesma aba)
+// ============================================================
+(async function init(){
+  const { data } = await sb.auth.getSession();
+  if(data.session){
+    enterDashboard(data.session.user);
+  }
+})();
+</script>
+</body>
+</html>
